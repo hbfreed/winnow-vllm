@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 packages = ["src/winnow_vllm"]
 
 [tool.uv.sources]
-moe-winnow = { git = "https://github.com/hbfreed/winnow.git", rev = "81495d2a6dafca894ff02760160a42ac2b1adc20" }
+moe-winnow = { git = "https://github.com/hbfreed/winnow.git", rev = "233f49acb3380d07ebe1e5fe53d6e5c98c1f076a" }
 torch = { index = "pytorch-cu130" }
 torchaudio = { index = "pytorch-cu130" }
 torchvision = { index = "pytorch-cu130" }
