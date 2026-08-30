@@ -17,11 +17,12 @@ def register() -> None:
 
     from transformers import AutoConfig
     from vllm import ModelRegistry
-    from winnow.runtime import WinnowOlmoeConfig, WinnowQwen3_5MoeConfig
+    from winnow.runtime import WinnowAfmoeConfig, WinnowOlmoeConfig, WinnowQwen3_5MoeConfig
 
     for model_type, config_type in (
         ("winnow_olmoe", WinnowOlmoeConfig),
         ("winnow_qwen3_5_moe", WinnowQwen3_5MoeConfig),
+        ("winnow_afmoe", WinnowAfmoeConfig),
     ):
         try:
             AutoConfig.register(model_type, config_type)
@@ -35,6 +36,10 @@ def register() -> None:
     ModelRegistry.register_model(
         "WinnowQwen3_5MoeForCausalLM",
         "winnow_vllm.qwen:WinnowQwen3_5MoeForCausalLM",
+    )
+    ModelRegistry.register_model(
+        "WinnowAfmoeForCausalLM",
+        "winnow_vllm.afmoe:WinnowAfmoeForCausalLM",
     )
 
 

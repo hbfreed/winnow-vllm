@@ -67,3 +67,36 @@ def test_qwen_loader_packs_combined_expert_weights(monkeypatch):
         "model.layers.0.mlp.w_up",
         "model.layers.0.mlp.w_down",
     }
+
+
+def test_afmoe_loader_packs_and_renames(monkeypatch):
+    from winnow.runtime.fast import FastSigmoidMoE
+
+    from winnow_vllm.afmoe import WinnowAfmoeForCausalLM
+
+    mlp = FastSigmoidMoE(HIDDEN, WIDTHS, 1, routed_scaling_factor=2.826)
+    model = WinnowAfmoeForCausalLM.__new__(WinnowAfmoeForCausalLM)
+    nn.Module.__init__(model)
+    model.model = Model(mlp)
+
+    generator = torch.Generator().manual_seed(4)
+    weights = expert_weights(4)
+    weights.append(
+        (
+            "model.layers.0.mlp.router.gate.weight",
+            torch.randn(len(WIDTHS), HIDDEN, generator=generator),
+        )
+    )
+    weights.append(("model.layers.0.mlp.expert_bias", torch.rand(len(WIDTHS), generator=generator)))
+    loaded = model.load_weights(iter(weights))
+    assert loaded == {
+        "model.layers.0.mlp.w_gate",
+        "model.layers.0.mlp.w_up",
+        "model.layers.0.mlp.w_down",
+        "model.layers.0.mlp.gate.weight",
+        "model.layers.0.mlp.e_score_correction_bias",
+    }
+    assert mlp.e_score_correction_bias.dtype == torch.float32
+    torch.testing.assert_close(
+        mlp.gate.weight, dict(weights)["model.layers.0.mlp.router.gate.weight"]
+    )

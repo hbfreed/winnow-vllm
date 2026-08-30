@@ -13,6 +13,7 @@ def test_registers_only_winnow_architectures(monkeypatch):
     assert {name for name, _target in registered} == {
         "WinnowOlmoeForCausalLM",
         "WinnowQwen3_5MoeForCausalLM",
+        "WinnowAfmoeForCausalLM",
     }
 
 
