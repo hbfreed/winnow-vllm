@@ -107,11 +107,10 @@ def test_afmoe_loader_quantizes_completed_blocks():
 
     from winnow_vllm.afmoe import WinnowAfmoeForCausalLM
 
-    mlp = FastSigmoidMoE(HIDDEN, WIDTHS, 1, routed_scaling_factor=2.826)
+    mlp = FastSigmoidMoE(HIDDEN, WIDTHS, 1, routed_scaling_factor=2.826, quantize_w8a16=True)
     model = WinnowAfmoeForCausalLM.__new__(WinnowAfmoeForCausalLM)
     nn.Module.__init__(model)
     model.model = Model(mlp)
-    model.quantize_experts_int8 = True
 
     weights = expert_weights(6)
     weights.append(("model.layers.0.mlp.router.gate.weight", torch.randn(len(WIDTHS), HIDDEN)))
