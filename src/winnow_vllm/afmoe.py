@@ -8,6 +8,7 @@ from collections.abc import Iterable
 import torch
 import torch.nn.functional as F
 from torch import nn
+from vllm.compilation.decorators import support_torch_compile
 from vllm.config import VllmConfig
 from vllm.distributed import get_pp_group, get_tensor_model_parallel_world_size
 from vllm.model_executor.layers.layernorm import RMSNorm
@@ -101,6 +102,14 @@ class WinnowAfmoeDecoderLayer(AfmoeDecoderLayer):
         self.post_mlp_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
+@support_torch_compile(
+    dynamic_arg_dims={
+        "input_ids": 0,
+        "positions": -1,
+        "intermediate_tensors": 0,
+        "inputs_embeds": 0,
+    }
+)
 class WinnowAfmoeModel(AfmoeModel):
     """Build the Afmoe skeleton without a uniform fused MoE allocation."""
 
@@ -120,9 +129,7 @@ class WinnowAfmoeModel(AfmoeModel):
 
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
-            lambda layer_prefix: WinnowAfmoeDecoderLayer(
-                vllm_config=vllm_config, prefix=layer_prefix
-            ),
+            lambda prefix: WinnowAfmoeDecoderLayer(vllm_config=vllm_config, prefix=prefix),
             prefix=f"{prefix}.layers",
         )
 
