@@ -32,7 +32,7 @@ from vllm.model_executor.models.utils import (
 )
 from winnow.runtime.fast import FastSigmoidMoE
 
-from .policy import validate_dtype, validate_eager, validate_quantization
+from .policy import use_int8_w8a16, validate_dtype, validate_eager, validate_expert_quantization
 
 _EXPERT_WEIGHT = re.compile(
     r"^model\.layers\.(\d+)\.mlp\.experts\.(gate_up_projs|down_projs)\.(\d+)$"
@@ -141,7 +141,7 @@ class WinnowAfmoeForCausalLM(AfmoeForCausalLM):
 
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
         config = vllm_config.model_config.hf_config
-        validate_quantization(vllm_config.quant_config)
+        validate_expert_quantization(vllm_config.quant_config)
         validate_dtype(vllm_config)
         validate_eager(vllm_config)
         if get_tensor_model_parallel_world_size() != 1:
@@ -162,6 +162,7 @@ class WinnowAfmoeForCausalLM(AfmoeForCausalLM):
             self.lm_head = PPMissingLayer()
         self.logits_processor = LogitsProcessor(config.vocab_size)
         self.make_empty_intermediate_tensors = self.model.make_empty_intermediate_tensors
+        self.quantize_experts_int8 = use_int8_w8a16(vllm_config.quant_config)
 
     _STACKED = (
         ("qkv_proj", ".q_proj", "q"),
@@ -175,6 +176,14 @@ class WinnowAfmoeForCausalLM(AfmoeForCausalLM):
         loaded: set[str] = set()
         start_layer = self.model.start_layer
         end_layer = self.model.end_layer
+        # Expert tensors left to load per local MoE block; when a block is
+        # complete, its packed weights quantize in place (INT8 W8A16).
+        remaining_expert_tensors: dict[int, int] = {}
+        if getattr(self, "quantize_experts_int8", False):
+            for index, decoder_layer in enumerate(self.model.layers):
+                mlp = getattr(decoder_layer, "mlp", None)
+                if hasattr(mlp, "expert_widths"):
+                    remaining_expert_tensors[index] = 2 * mlp.num_experts
 
         def layer_of(name: str) -> int | None:
             parts = name.split(".")
@@ -202,6 +211,11 @@ class WinnowAfmoeForCausalLM(AfmoeForCausalLM):
                 else:
                     down = mlp.load_expert_weight_(expert, "down", weight)
                     loaded.add(f"model.layers.{layer}.mlp.{down}")
+                if layer in remaining_expert_tensors:
+                    remaining_expert_tensors[layer] -= 1
+                    if remaining_expert_tensors[layer] == 0:
+                        del remaining_expert_tensors[layer]
+                        mlp.quantize_int8_()
                 continue
 
             name = original_name

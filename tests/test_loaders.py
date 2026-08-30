@@ -100,3 +100,23 @@ def test_afmoe_loader_packs_and_renames(monkeypatch):
     torch.testing.assert_close(
         mlp.gate.weight, dict(weights)["model.layers.0.mlp.router.gate.weight"]
     )
+
+
+def test_afmoe_loader_quantizes_completed_blocks():
+    from winnow.runtime.fast import FastSigmoidMoE
+
+    from winnow_vllm.afmoe import WinnowAfmoeForCausalLM
+
+    mlp = FastSigmoidMoE(HIDDEN, WIDTHS, 1, routed_scaling_factor=2.826)
+    model = WinnowAfmoeForCausalLM.__new__(WinnowAfmoeForCausalLM)
+    nn.Module.__init__(model)
+    model.model = Model(mlp)
+    model.quantize_experts_int8 = True
+
+    weights = expert_weights(6)
+    weights.append(("model.layers.0.mlp.router.gate.weight", torch.randn(len(WIDTHS), HIDDEN)))
+    weights.append(("model.layers.0.mlp.expert_bias", torch.rand(len(WIDTHS))))
+    model.load_weights(iter(weights))
+    assert mlp.is_int8
+    assert mlp.w_gate.dtype == torch.int8
+    assert mlp.e_score_correction_bias.dtype == torch.float32
